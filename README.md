@@ -25,4 +25,6 @@
     
     f:  hostlist文件  里面时host列表
     
+    p:  password 用户密码
+    
 
