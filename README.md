@@ -24,6 +24,11 @@
     u:  准备做免密码的用户;
     
     f:  hostlist文件  里面时host列表
+    文件内容实例:
+      hostname1(ip1)
+      hostname2(ip2)
+      hostname3(ip3)
+      hostname4(ip4)
     
     p:  password 用户密码
     
