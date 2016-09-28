@@ -30,6 +30,6 @@
       hostname3(ip3)
       hostname4(ip4)
     
-    p:  password 用户密码
+    p:  password 用户密码,要求所有机器上用户密码一致.
     
 
