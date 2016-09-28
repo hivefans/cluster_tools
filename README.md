@@ -17,7 +17,7 @@
   
   使用方法:
   
-    ssh-skip-pwd  -u <username>  -f  <hostlist>
+    ssh-skip-pwd  -u <username>  -p <password>  -f  <hostlist>
     
   参数解释:
   
