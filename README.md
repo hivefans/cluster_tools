@@ -32,4 +32,6 @@
     
     p:  password 用户密码,要求所有机器上用户密码一致.
     
-
+  问题总结:
+     ssh连接频繁时会报错:Received disconnect from XXXX: 2: Too many authentication failures for XXXX
+     解决办法: 在/etc/sshd_config 修改MaxAuthTries 20即可,也不要太大.
