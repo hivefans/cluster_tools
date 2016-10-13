@@ -1,1 +1,75 @@
-a
+[ssh-skip-pwd]是ssh免密码工具。
+
+安装前置条件：
+1，确认python版本为2.6-2.x [非 python3]
+2，安装 pexpect 、paramiko组件
+  建议：安装pip后使用pip 安装pexpect 、paramiko
+  
+安装方法：
+a,复制ssh-skip-pwd文件到/usr/local/bin/中
+b,用户root用户为该脚本赋权限 
+  #chmod 774 /usr/local/bin/ssh-skip-pwd
+
+参数列表简介：
+-h:帮助
+-f:自定义的 host list 文件地址，参看使用方法
+-F:自定义的 host + 密码 的文件地址，参看使用方法
+-p：用户密码，参看使用方法
+-P:ssh port,默认22
+-u：用户名，参看使用方法
+--curt_pwd:当前用户密码，，参看使用方法
+使用方法：
+
+##########
+
+情景一：用户u1登录A服务器，在A服务器terminal上，自己为自己做免密码登录B、C服务器
+  
+环境信息：
+  hosts信息：
+    10.10.1.10  A
+    10.10.1.11  B
+    10.10.1.12  C
+
+  网络信息，A B C 网络时可以联通的
+
+当A B C 上用户u1的密码一致为：123456
+  创建~/hosts.list 文件，文件内容如下
+    10.10.1.11  B
+    10.10.1.12  C  
+    
+   $ ssh-skip-pwd -f ~/hosts.list -p 123456
+
+当A B C 上用户u1的密码不一致
+  创建~/hosts_pwd.list 文件，文件内容如下,
+    10.10.1.11  B 123456
+    10.10.1.12  C  abc4543
+  解释：第一列是IP，第二列是hostname，第三列是密码
+  
+  $ ssh-skip-pwd -F ~/hosts_pwd.list
+
+注意：用户u1如果是root，-f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中。
+#############
+
+情景二：在A服务器上使用u1用户登录为u2做ssh免密码登录B C
+要求:A B C 上用户u2的密码一致,[如为：123456],u1的密码：a123
+  创建~/hosts.list 文件，文件内容如下,
+    10.10.1.11  B
+    10.10.1.12  C
+  $ ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list  
+  # ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list --curt_pwd a123  
+
+注意：用户u1如果是root，必须跟上 --curt_pwd   -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中。
+#############
+
+情景三：在A服务器上使用u1用户登录为多个用户做ssh免密码登录B C
+要求：每一个用户在ABC上密码一致
+  创建~/user_pwd.list文件，文件内容如下，
+    user1 123456
+    user2 abcd123
+  注意：第一列是用户名，第二列是密码
+  创建~/hosts.list 文件，文件内容如下,
+    10.10.1.11  B
+    10.10.1.12  C
+  
+  $(#) ssh-skip-pwd  -U ~/user_pwd.list  -f ~/hosts.list  --curt_pwd a123
+ 注意：用户u1如果是root，必须跟上 --curt_pwd   -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中。
