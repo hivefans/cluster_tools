@@ -56,9 +56,12 @@ b,用户root用户为该脚本赋权限
     10.10.1.11  B
     10.10.1.12  C
   $ ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list  
-  # ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list --curt_pwd a123  
+  # ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list --curt_pwd=a123  
 
-注意：用户u1如果是root，必须跟上 --curt_pwd   -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中。
+注意：1,用户u1如果是root 时 -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中，此时必须跟上 --curt_pwd=ab123  （root用户的密码）
+     2，普通用户不需要加入 --curt_pwd= 参数
+     3，如果在A机器上想在D机器上为用户u2做ssh免密码登录BC，加入 -s参数  同时加入 --curt_pwd= 参数,此时要确保用户u1在D机器存在。
+        $(#) ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list -s D   --curt_pwd=abcd12
 #############
 
 情景三：在A服务器上使用u1用户登录为多个用户做ssh免密码登录B C
@@ -70,6 +73,9 @@ b,用户root用户为该脚本赋权限
   创建~/hosts.list 文件，文件内容如下,
     10.10.1.11  B
     10.10.1.12  C
-  
-  $(#) ssh-skip-pwd  -U ~/user_pwd.list  -f ~/hosts.list  --curt_pwd a123
- 注意：用户u1如果是root，必须跟上 --curt_pwd   -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中。
+  $ ssh-skip-pwd  -U ~/user_pwd.list  -f ~/hosts.list
+  # ssh-skip-pwd  -U ~/user_pwd.list  -f ~/hosts.list  --curt_pwd a123
+ 注意：1,用户u1如果是root 时 -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中，此时必须跟上 --curt_pwd=ab123  （root用户的密码）
+      2，普通用户不需要加入 --curt_pwd= 参数
+      3，如果在A机器上想在D机器上为用户u2做ssh免密码登录BC，加入 -s参数  同时加入 --curt_pwd= 参数,此时要确保用户u1在D机器存在。
+        $(#)  ssh-skip-pwd -U ~/user_pwd.list  -f ~/hosts.list -s D   --curt_pwd=abcd12
