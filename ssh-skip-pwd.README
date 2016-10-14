@@ -22,7 +22,13 @@ b,用户root用户为该脚本赋权限
 
 ##########
 
-情景一：用户u1登录A服务器，在A服务器terminal上，自己为自己做免密码登录B、C服务器
+简单场景：为当前登录用户在A服务器上做ssh免密码登录
+
+  #($) ssh-skip-pwd  -p password  -s A
+
+##########
+
+情景一：A服务器当前登录用户u1，自己做免密码登录B、C服务器
   
 环境信息：
   hosts信息：
@@ -58,7 +64,7 @@ b,用户root用户为该脚本赋权限
   $ ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list  
   # ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list --curt_pwd=a123  
 
-注意：1,用户u1如果是root 时 -f 和 -F 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中，此时必须跟上 --curt_pwd=ab123  （root用户的密码）
+注意：1,用户u1如果是root 时 -f 中hots信息会更新到A服务/etc/hosts中，并且同步到其他节点中，此时必须跟上 --curt_pwd=ab123  （root用户的密码）
      2，普通用户不需要加入 --curt_pwd= 参数
      3，如果在A机器上想在D机器上为用户u2做ssh免密码登录BC，加入 -s参数  同时加入 --curt_pwd= 参数,此时要确保用户u1在D机器存在。
         $(#) ssh-skip-pwd -u u2 -p 123456 -f ~/hosts.list -s D   --curt_pwd=abcd12
