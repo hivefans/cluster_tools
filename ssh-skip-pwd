@@ -1,0 +1,838 @@
+#!/usr/bin/python
+# -*- coding: UTF-8 -*-
+import	sys, os, re,time
+reload(sys)
+sys.setdefaultencoding( "utf-8" )
+import pexpect, getpass, getopt,paramiko
+from subprocess import call 
+import getpass, traceback
+import socket
+import pwd
+ 
+"""
+    @note: 连接远程服务器，并执行命令
+    @param host:远程服务器ip （考虑到远程服务器可能没有把本地服务器ip及hostname放到hosts文件中，建议使用ip）
+    @param port: SSH port
+    @param user: 远程服务器用户名
+    @param pwd :远程服务器密码
+     
+"""
+ 
+def conn_server_run_cmd3(host, port, user, pwd):
+   
+    ssh = paramiko.SSHClient()
+    try:  
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())  
+        ssh.connect(host,port=port,username=user,password=pwd,allow_agent=False,look_for_keys=False)  
+        stdin, stdout, stderr = ssh.exec_command(cmd) 
+        return {"status":0, "msg":"正常", "data":"None"}  
+    except Exception,e:  
+        print "连接"+host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+        return {"status":-1, "msg":"失败", "data":"None"} 
+    
+def conn_server_run_cmd(host, port, user, pwd,cmd):    
+    rtstr=""
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host,port,user,pwd,timeout=5)
+        #for m in cmd:
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+#           stdin.write("Y")   #简单交互，输入 ‘Y’ 
+        out = stdout.readlines()
+            #屏幕输出
+        for o in out:
+            rtstr=rtstr+o
+        ssh.close()
+        rtstr = {"status":0, "msg":"正常", "data":rtstr} 
+    except :
+        print '%s\tError\n'%(host)
+        rtstr = {"status":-1, "msg":"失败", "data":None} 
+    return rtstr;
+
+def change_user_crt_rsa_key(user,password,host,port):
+    """
+    首先在执行主机上创建公钥和私钥
+    ssh-keygen -t rsa -P '' -f '/user_home_dir/.ssh/id_rsa'
+    """
+    rt_val = {}
+    flag = -1
+    if user == "" and user == None :
+        rt_val = {"status":-1, "msg":"用户名不能为空", "data":"None"}
+        return rt_val
+    user_homedir_data = get_userdir(user)
+    user_homedir = user_homedir_data["data"]
+    su_user_cmd = "ssh -p " + str(port) + " "+user+"@"+host
+    mkdir_ssh_cmd = "mkdir  " + user_homedir+"/.ssh  && chmod 700 " + user_homedir+"/.ssh" 
+    create_ras_cmd = "ssh-keygen -t rsa -P '' -f '" + user_homedir + "/.ssh/id_rsa' \n"
+    ssh = pexpect.spawn(su_user_cmd)
+    
+    try :
+        flag=ssh.expect(['password:', 'continue connecting (yes/no)?','login:'],timeout=5)
+        if flag == 0:
+            ssh.sendline(password)
+            ssh.sendline(mkdir_ssh_cmd)
+            try :
+                ssh.sendline(create_ras_cmd)
+                flag1 = ssh.expect(['Overwrite'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline('n')
+                time.sleep(0.1)
+                pri_key = user_homedir+"/.ssh/id_rsa"
+                ssh_add_cmd = "ssh-add   " + pri_key
+                ssh.sendline(ssh_add_cmd)
+            except Exception, e:
+                #print e 
+                print "第一次生成rsa key 文件"
+                pri_key = user_homedir+"/.ssh/id_rsa"
+                ssh_add_cmd = "ssh-add   " + pri_key
+                ssh.sendline(ssh_add_cmd)
+        elif flag == 1:
+            ssh.sendline('yes')
+            ssh.expect('password:')
+            ssh.sendline(password)
+            ssh.sendline(mkdir_ssh_cmd)
+            try :
+                ssh.sendline(create_ras_cmd)
+                flag1 = ssh.expect(['Overwrite'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline('n')
+                time.sleep(0.1)
+                pri_key = user_homedir+"/.ssh/id_rsa"
+                ssh_add_cmd = "ssh-add   " + pri_key
+                ssh.sendline(ssh_add_cmd)
+            except Exception, e:
+                #print e 
+                print "第一次生成rsa key 文件"
+                pri_key = user_homedir+"/.ssh/id_rsa"
+                ssh_add_cmd = "ssh-add   " + pri_key
+                ssh.sendline(ssh_add_cmd)
+        elif flag==2:
+            try :
+                ssh.sendline(create_ras_cmd)
+                flag1 = ssh.expect(['Overwrite'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline('n')
+                time.sleep(0.1)
+                pri_key = user_homedir+"/.ssh/id_rsa"
+                ssh_add_cmd = "ssh-add   " + pri_key
+                ssh.sendline(ssh_add_cmd)
+            except Exception, e:
+                #print e 
+                print "第一次生成rsa key 文件"
+                pri_key = user_homedir+"/.ssh/id_rsa"
+                ssh_add_cmd = "ssh-add   " + pri_key
+                ssh.sendline(ssh_add_cmd)
+        #a 小睡一下
+        time.sleep(0.1)
+        
+        ssh.close()
+        rt_val = {"status":0, "msg":"正常", "data":"None"}
+        return rt_val
+    except Exception ,e:
+        #print e
+        print "第一次创建  rsa key"
+        # os.system(create_ras_cmd)
+        ssh.close()
+        rt_val = {"status":0, "msg":"生成rsa key 失败", "data":"None"}
+        return rt_val 
+"""
+    @note: 连接远程服务器，并在服务器上创建.ssh文件夹，且赋予700权限 
+            ***这个方法有一些问题，执行***
+    @param host:远程服务器ip （考虑到远程服务器可能没有把本地服务器ip及hostname放到hosts文件中，建议使用ip）
+    @param port: SSH port
+    @param user: 远程服务器用户名
+    @param pwd :远程服务器密码
+   
+"""
+def conn_server_run_cmd2(host, port, user, pwd,cmd):
+    ssh_cmd = "ssh  -p "+str(port)  +"  "+user+"@"+host
+    #print ssh_cmd
+    ssh = pexpect.spawn(ssh_cmd)
+    try:
+        flag=ssh.expect(['password:', 'continue connecting (yes/no)?',"EOF","TIMEOUT"],timeout=5)
+        if flag == 0:
+            ssh.sendline(pwd)
+        elif flag == 1:
+            ssh.sendline('yes')
+            ssh.expect('password:')
+            ssh.sendline(pwd)
+        elif flag==2:
+            print "EOF"
+        elif flag==3:
+            print "time out"
+        #a 小睡一下
+        time.sleep(0.1)
+        r = ssh.sendline(cmd)
+        print r
+        # print r
+        return {"status":0, "msg":"正常", "data":"None"}
+    except Exception, e :
+        print "连接"+host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+        return {"status":-1, "msg":"失败", "data":"None"}    
+
+"""
+    @note: 获取用户家目录
+    @param user:用户名，不能空
+    @return: 类型，字典；{status:状态（数字）,msg:"消息",data:"数据"}
+        status : 0 ,正常； -1 ，用户名空或None
+"""
+def get_userdir(user):
+    rt_val = {}
+    if user == "" and user == None :
+        rt_val = {"status":-1, "msg":"用户名不能为空", "data":"None"}
+        return rt_val
+    
+    user_homedir = ""
+    if user == "root" :
+        user_homedir = "/root/"
+    else:
+        user_homedir = "/home/" + user
+    
+    rt_val = {"status":0, "msg":"正常", "data":user_homedir}
+    return rt_val
+"""
+    @note: 创建 rsa key
+    @param user: 用户名，不能为空
+    @return: 类型，字典；{status:状态（数字）,msg:"消息",data:"数据"}
+        status : 0 ,正常； -1 ，用户名空或None
+"""
+def create_rsa_key(user):
+    """
+    首先在执行主机上创建公钥和私钥
+    ssh-keygen -t rsa -P '' -f '/user_home_dir/.ssh/id_rsa'
+    """
+    rt_val = {}
+    flag = -1
+    if user == "" and user == None :
+        rt_val = {"status":-1, "msg":"用户名不能为空", "data":"None"}
+        return rt_val
+    user_homedir_data = get_userdir(user)
+    user_homedir = user_homedir_data["data"]
+    create_ras_cmd = "ssh-keygen -t rsa -P '' -f '" + user_homedir + "/.ssh/id_rsa'"
+    mkdir_ssh_cmd = "mkdir  " + user_homedir+"/.ssh  && chmod 700 " + user_homedir+"/.ssh" 
+    os.system(mkdir_ssh_cmd)
+    ssh = pexpect.spawn(create_ras_cmd)
+    try :
+        flag = ssh.expect(['Overwrite'],timeout=5)
+        if flag == 0:
+            ssh.sendline('n')
+        time.sleep(0.1)
+        ssh.close()
+        pri_key = user_homedir+"/.ssh/id_rsa"
+        ssh_add_cmd = "ssh-add   " + pri_key
+        os.system(ssh_add_cmd)
+        rt_val = {"status":0, "msg":"正常", "data":"None"}
+        return rt_val
+    except :
+        print "第一次创建  rsa key"
+        # os.system(create_ras_cmd)
+        ssh.close()
+        rt_val = {"status":0, "msg":"生成rsa key 失败", "data":"None"}
+        return rt_val    
+
+"""
+    @note: 免密码设置
+    @param user: user
+    @param pwd: pwd
+    @param host: 远程服务器  
+"""
+def ssh_copy_id_2_host(user,pwd,host,port):
+    user_homedir_data = get_userdir(user)
+    user_homedir = user_homedir_data["data"]
+    
+    cmd = "ssh-copy-id  -i  "+user_homedir+"/.ssh/id_rsa.pub  ' -p  " + str(port)+"  " +user+"@"+host +"'"
+    #print cmd
+    ssh = pexpect.spawn(cmd)
+    try:
+        flag=ssh.expect(['password:', 'continue connecting (yes/no)?','.ssh/authorized_keys'],timeout=5)
+        if flag == 0:
+            ssh.sendline(pwd)
+        elif flag == 1:
+            ssh.sendline('yes')
+            ssh.expect('password:')
+            ssh.sendline(pwd)
+        elif flag==2:
+            pass
+        time.sleep(0.1)
+        ssh.close()
+        rt_val = {"status":0, "msg":"正常", "data":"None"}
+        return rt_val
+    except Exception, e :
+        print "为用户："+user+"同步公钥：连接"+host +"出现问题：1，EOF 或者 2，该机器已经免密码！"
+        ssh.close()
+        rt_val = {"status":-1, "msg":"失败", "data":"None"}
+        return rt_val
+"""
+    @note: 在local_host机器上，向remote_host机器上做免密码操作
+    @param user:
+    @param password:
+    @param local_host:
+    @param remote_host:
+    @param   port: ssh port
+    @return:  
+"""
+
+def change_user_ssh_copy_id_2_host(user,password,local_host,remote_host,port):
+    rt_val = {}
+    flag = -1
+    if user == "" and user == None :
+        rt_val = {"status":-1, "msg":"用户名不能为空", "data":"None"}
+        return rt_val
+    user_homedir_data = get_userdir(user)
+    user_homedir = user_homedir_data["data"]
+    su_user_cmd = "ssh -p " + str(port) + " "+user+"@"+local_host
+    print su_user_cmd
+    ssh_copy_id_cmd = "ssh-copy-id  -i  "+user_homedir+"/.ssh/id_rsa.pub  " +user+"@"+remote_host +"\n"
+    print ssh_copy_id_cmd
+    ssh = pexpect.spawn(su_user_cmd)
+    
+    try :
+        flag=ssh.expect(['password:', 'continue connecting (yes/no)?','login:'],timeout=5)
+        if flag == 0:
+            ssh.sendline(password)
+            try :
+                ssh.sendline(ssh_copy_id_cmd)
+                flag1 = ssh.expect(['password:', 'continue connecting (yes/no)?','.ssh/authorized_keys'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline(password)
+                elif flag1 == 1 :
+                    ssh.sendline('yes')
+                    ssh.expect('password:')
+                    ssh.sendline(password)
+                elif flag1 == 2 :
+                    pass
+                time.sleep(0.1)
+            except Exception, e:
+                print e 
+        elif flag == 1:
+            ssh.sendline('yes')
+            ssh.expect('password:')
+            ssh.sendline(password)
+            try :
+                ssh.sendline(ssh_copy_id_cmd)
+                flag1 = ssh.expect(['password:', 'continue connecting (yes/no)?','.ssh/authorized_keys'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline(password)
+                elif flag1 == 1 :
+                    ssh.sendline('yes')
+                    ssh.expect('password:')
+                    ssh.sendline(password)
+                elif flag1 == 2:
+                    pass
+                time.sleep(0.1)
+            except Exception, e:
+                print e 
+        elif flag==2:
+            try :
+                ssh.sendline(ssh_copy_id_cmd)
+                flag1 = ssh.expect(['password:', 'continue connecting (yes/no)?','.ssh/authorized_keys'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline(password)
+                elif flag1 == 1 :
+                    ssh.sendline('yes')
+                    ssh.expect('password:')
+                    ssh.sendline(password)
+                elif flag1 == 2 :
+                    pass
+                time.sleep(0.1)
+            except Exception, e:
+                print e             
+        elif flag==3:
+            print "time out"
+        #a 小睡一下
+        time.sleep(0.1)
+        
+        ssh.close()
+        rt_val = {"status":0, "msg":"正常", "data":"None"}
+        return rt_val
+    except Exception ,e:
+        #print e
+        print "第一次创建  rsa key"
+        # os.system(create_ras_cmd)
+        ssh.close()
+        rt_val = {"status":0, "msg":"生成rsa key 失败", "data":"None"}
+        return rt_val 
+    
+"""
+    @note: 判断ip、hostname是否存在hosts中
+    @param ip: ip
+    @param hostname: hostname
+    @return: bool  true 在，false  不在  
+"""
+def ip_is_exist_hosts(ip, hostname):
+    
+    lines = []
+    lines = get_lines_from_file("/etc/hosts")
+    ip_flag = False
+    hostname_flag = False
+    for line in lines:
+        # line 是host
+        if re.search(ip + "\s+", line) != None :
+            print "此IP:"+ip+"在/etc/hosts内"
+            ip_flag = True
+        if re.search("\s+"+hostname , line) != None :
+            print "此hostname:"+hostname+"在/etc/hosts内"
+            hostname_flag = True
+        if ip_flag == True and hostname_flag == True :
+            return True
+    
+    return False
+
+"""
+    @note : 去掉注释行，返回[]lines
+    @param hlist_file:
+    @return : []  
+"""
+def get_lines_from_file(hlist_file):
+    read_hostlist = open(hlist_file)
+    lines = read_hostlist.readlines()
+    rlines = lines
+    index = 0
+    for line in lines:
+        # except char '#'
+         flag = re.findall("^#", line)
+         if flag != [] and flag[0] == '#' :
+             del rlines[index]
+         index = index + 1
+    return rlines
+
+"""
+    @note: 把hlist_file的ip hostname放入本机hosts中
+    @param hlist_file: ip   hostname 列表
+    @return: none
+"""
+def put_hostlist_2_hosts(hlist_file):
+    lines = []
+    lines = get_lines_from_file(hlist_file)
+    for line in lines:
+        # line 是host
+        # except char '#'
+        
+        target_host = line.strip();
+        line_array = re.split("\s+" , target_host);
+        if len(line_array) != 2 and len(line_array) != 3:
+            print "文件：" + hlist_file + "中，" + target_host + "这条数据有问题，正确格式：<ip    hostname>"
+            continue
+        ip = line_array[0]
+        hostname = line_array[1]
+        ip_is_exist = ip_is_exist_hosts(ip, hostname)
+        if ip_is_exist == False :
+            add_hosts_cmd = "echo " + ip+"\t" + hostname + " >> /etc/hosts"
+            os.system(add_hosts_cmd)
+
+
+def change_user_copy_file_2_target_host(user, pwd,server_host, source_path, target_host, target_port, target_path):
+    flag = -1
+    su_user_cmd = "ssh -p %s %s@%s" % (str(target_port) , user ,server_host)
+    print su_user_cmd
+    scp_cmd = "scp  -P %s %s %s@%s:%s" % (str(target_port) , source_path , user, target_host , target_path+"\n")
+    print scp_cmd
+    ssh = pexpect.spawn(su_user_cmd)
+    try:
+        flag=ssh.expect(['password:', 'continue connecting (yes/no)?','login:'],timeout=60)
+        if flag == 0:
+            ssh.sendline(pwd)
+            try:
+                ssh.sendline(scp_cmd)
+                flag1 = ssh.expect(['password:', 'continue connecting (yes/no)?','hosts'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline(pwd)
+                elif flag1 == 1:
+                    ssh.sendline('yes')
+                    ssh.expect('password:')
+                    ssh.sendline(pwd)
+                elif flag1==2:
+                    pass
+                # scp.sendline(cmd)
+                time.sleep(0.1)
+                # r = scp.read()
+                # print r
+                ssh.close()
+                return {"status":0, "msg":"正常", "data":"None"}
+            except Exception , e :
+                print e
+                print "同步文件hosts：用户"+user+"在服务器"+server_host+"连接"+target_host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+                ssh.close()
+                return {"status":-1, "msg":"失败", "data":"None"}
+        elif flag == 1:
+            ssh.sendline('yes')
+            ssh.expect('password:')
+            ssh.sendline(pwd)
+            try:
+                ssh.sendline(scp_cmd)
+                flag1 = ssh.expect(['password:', 'continue connecting (yes/no)?','hosts'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline(pwd)
+                elif flag1 == 1:
+                    ssh.sendline('yes')
+                    ssh.expect('password:')
+                    ssh.sendline(pwd)
+                elif flag1==2:
+                    pass                    
+                # scp.sendline(cmd)
+                time.sleep(0.1)
+
+                ssh.close()
+                return {"status":0, "msg":"正常", "data":"None"}
+            except Exception , e :
+                print "同步文件hosts：用户"+user+"在服务器"+server_host+"连接"+target_host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+                ssh.close()
+                return {"status":-1, "msg":"失败", "data":"None"}            
+        elif flag == 2:
+            try:
+                ssh.sendline(scp_cmd)
+                flag1 = ssh.expect(['password:', 'continue connecting (yes/no)?','hosts'],timeout=5)
+                if flag1 == 0:
+                    ssh.sendline(pwd)
+                elif flag1 == 1:
+                    ssh.sendline('yes')
+                    ssh.expect('password:')
+                    ssh.sendline(pwd)
+                elif flag1==2:
+                    pass
+                # scp.sendline(cmd)
+                time.sleep(0.1)
+
+                ssh.close()
+                return {"status":0, "msg":"正常", "data":"None"}
+            except Exception , e :
+                print "同步文件hosts：用户"+user+"在服务器"+server_host+"连接"+target_host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+                ssh.close()
+                return {"status":-1, "msg":"失败", "data":"None"}            
+    except Exception , e :
+        print e
+        print "同步文件hosts：用户"+user+"在服务器"+server_host+"连接"+target_host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+        ssh.close()
+        return {"status":-1, "msg":"失败", "data":"None"}   
+
+"""
+    @note: 复制本机文件到目标机器
+    @param user:用户名
+    @param pwd: 密码
+    @param source_path: 本机数据路径 
+    @param target_host: 目标主机
+    @param target_port: ssh port 
+    @param target_path: 目标主机数据路径
+
+    @return: 类型，字典；{status:状态（数字）,msg:"消息",data:"数据"}
+        status : 0 ,正常； -1 ，远程复制异常
+"""
+def copy_file_2_target_host(user, pwd, source_path, target_host, target_port, target_path):
+    flag = -1
+    scp_cmd = "scp  -P " + str(target_port) + "  " + source_path + " " + user + "@" + target_host + ":" + target_path
+    #print scp_cmd
+    scp = pexpect.spawn(scp_cmd)
+    try:
+        flag = scp.expect(['password:', 'continue connecting (yes/no)?'],timeout=5)
+        if flag == 0:
+            scp.sendline(pwd)
+        elif flag == 1:
+            scp.sendline('yes')
+            scp.expect('password:')
+            scp.sendline(pwd)
+        # scp.sendline(cmd)
+        time.sleep(0.1)
+        # r = scp.read()
+        # print r
+        scp.close()
+        return {"status":0, "msg":"正常", "data":"None"}
+    except Exception , e :
+        print "同步文件hosts：连接"+target_host +"出现问题：1，EOF 或者 2，该机器已经为免密码！"
+        scp.close()
+        return {"status":-1, "msg":"失败", "data":"None"}
+    
+    
+    
+def curt_user_ssh_nopwd_by_ih_file(user,password,port,ih_file):
+    if ih_file == "" :
+        return {"status":-1,"msg":"fail","data":None}
+       # ##a 获取用户家目录
+    # ##a 将-f参数传入文内容导入本地hosts文本中,并同步到远程服务器
+    if user == "root"  :
+        put_hostlist_2_hosts(ih_file)
+    
+    create_rsa_key_data=create_rsa_key(user)
+    
+    # ##-f的（hostlist） 参数值处理
+    if ih_file != "" :
+        lines = []
+        lines = get_lines_from_file(ih_file)
+        for line in lines:
+            
+            # line 是host
+            target_host = line.strip();
+            line_array = re.split("\s+" , target_host);
+            if len(line_array) == 2 :
+                ip = line_array[0]
+                hostname = line_array[1]
+                local_hostname=socket.gethostname()
+                if hostname == local_hostname :
+                    continue
+                
+                if user=="root":
+                    copy_file_2_target_host(user, password, "/etc/hosts", ip, port, "/etc/")
+                #a ssh 免密码设置
+                ssh_copy_id_2_host_data =ssh_copy_id_2_host(user,password,hostname,port)
+                
+    
+def curt_user_ssh_nopwd_by_ihp_file(user,password,port,ihp_file):
+    if ihp_file == "" :
+        return {"status":-1,"msg":"fail","data":None}
+    # ##a 将-f参数传入文内容导入本地hosts文本中,并同步到远程服务器
+    if user == "root"  :
+        put_hostlist_2_hosts(ihp_file)
+    
+    create_rsa_key_data=create_rsa_key(user)
+    
+    if ihp_file != "" :
+        lines = []
+        lines = get_lines_from_file(ihp_file)
+        for line in lines:
+            
+            # line 是host
+            target_host = line.strip();
+            line_array = re.split("\s+" , target_host);
+    #             print "文件：" + file + "中，这条数据有问题，正确格式：ip    hostname"
+    #             continue
+            if len(line_array) == 3 :
+                ip = line_array[0]
+                hostname = line_array[1]
+                password = line_array[2]
+                local_hostname=socket.gethostname()
+                if hostname == local_hostname :
+                    continue
+                # ##a 同步hosts文件
+                if user=="root":
+                    copy_file_2_target_host(user, password, "/etc/hosts", ip, port, "/etc/")
+                # sync_hosts(password,hostname)
+                ssh_copy_id_2_host_data =ssh_copy_id_2_host(user,password,hostname,port)
+
+
+
+def otuser_4_user_ssh_nopwd(user,curt_pwd,ouser,password,server_host,port,ih_file):
+    if user == "root" :
+        put_hostlist_2_hosts(ih_file)
+    if server_host == "" or server_host == None :
+        server_host = "localhost"
+    change_user_crt_rsa_key(ouser,password,server_host,port)
+    
+    if ih_file != "" :
+        lines = []
+        lines = get_lines_from_file(ih_file)
+        for line in lines:
+            
+            # line 是host
+            target_host = line.strip();
+            line_array = re.split("\s+" , target_host);
+    #             print "文件：" + file + "中，这条数据有问题，正确格式：ip    hostname"
+    #             continue
+            if len(line_array) == 2 :
+                ip = line_array[0]
+                hostname = line_array[1]
+                conn_server_run_cmd_data =conn_server_run_cmd(server_host, port, user, curt_pwd,"hostname")
+                
+                local_hostname=conn_server_run_cmd_data["data"].strip()
+                print local_hostname
+                print hostname
+                if hostname == local_hostname :
+                    continue
+                # ##a 同步hosts文件
+                if user == "root" :
+                    change_user_copy_file_2_target_host(user, curt_pwd, server_host, "/etc/hosts", ip, port, "/etc/hosts")
+                
+                change_user_ssh_copy_id_2_host(ouser,password,server_host,hostname,port)
+                
+                # sync_hosts(password,hostname)
+                #ssh_copy_id_2_host_data =ssh_copy_id_2_host(user,password,hostname)
+    
+def otuser_4_userlist_ssh_nopwd(user,curt_pwd,port,user_pwd_file,server_host,ih_file):
+    
+    ouser=""
+    password=""
+    lines=[]
+    lines = get_lines_from_file(user_pwd_file)
+    for line in lines :
+        target_host = line.strip();
+        line_array = re.split("\s+" , target_host);
+#             print "文件：" + file + "中，这条数据有问题，正确格式：ip    hostname"
+#             continue
+        if len(line_array) == 2 :
+            ouser = line_array[0]
+            password = line_array[1]
+        elif len(line_array) ==1 :
+            ouser = line_array[0]
+                
+        otuser_4_user_ssh_nopwd(user,curt_pwd,ouser,password,server_host,port,ih_file)
+        
+def curt_user_ssh_nopwd_by_uph(user,password,server_host,port) :
+
+    create_rsa_key(user)
+    
+    local_hostname = socket.gethostname()
+    
+    if server_host == local_hostname :
+        sys.exit(0)
+    ssh_copy_id_2_host(user,password,server_host,port)
+    
+    # sync_hosts(password,hostname)
+    #ssh_copy_id_2_host_data =ssh_copy_id_2_host(user,password,hostname)
+    
+"""
+@note : ssh 免密码
+"""
+def ssh_skip_pwd():
+    
+    opts, args = getopt.getopt(sys.argv[1:], ":u:U:p:P:f:F:s:h",["curt_pwd="])
+    ih_file = "" #file's content:ip  hostname 
+    ihp_file=""  #file's content:ip  hostname    password
+    ouser = ""
+    curt_pwd=""
+    user_pwd_file=""
+    server_host="localhost"
+    password = ""
+    port = 22
+    help_flag=False
+    
+    uid = os.getuid()
+    user=""
+    if uid == 0 :
+        user="root"
+    else:
+        user = getpass.getuser()
+    for op, value in opts:
+        
+        if op == "-h" :
+            help_flag=True
+            ###a  -f 参数
+            f_content="\n\t文件内容示例\n\teg：\n\t#ip\thostname\n\t192.168.1.2\t\tnode1\n\t192.168.1.3\t\tnode3"
+            f_usage="\n-f:host列表；指定一个文件全路径；无默认值。" + f_content
+            
+            ###a -F 参数
+            F_content="\n\teg：\n\t#ip\t\thostname\t\tpassword\n\t192.168.1.2\t\tnode1\t\t123456\n\t192.168.1.3\t\tnode3\t\t3456787"
+            F_usage="\n-F： -F /path ,指定一个文件全路径；无默认值。该文件每一行包含：ip、hostname、password（远程服务器用户的密码）\n\t文件内容示例"+F_content
+           
+            ###a -h 参数
+            h_usage="\n-h:帮助;"
+            
+            ###a -p  参数
+            p_usage="\n-p:密码；"
+            
+            ###a -P  参数
+            P_usage="\n-P:ssh port,ssh 的监听端口，默认值：22"
+            
+            ###a -s 参数
+            s_usage="\n-s:服务器hostname或者IP；准备免密码连接其他服务器的机器名或者ip,默认值：localhost"
+            
+            ###a -u 参数
+            u_usage="\n-u:用户名；非root用户做ssh免密码用"
+            
+            ###a -U 参数
+            U_content="\n\t文件内容示例\n\teg1：\n\t#用户名\n\tuser1\n\tuser2\n\t......"
+            U_content=U_content+"\n\teg2:\n\t#用户名\t\t密码\n\tuser1\t\t123456\n\tuser2\t\t654321\n\t......"
+            U_usage="\n-U:用户列表"+U_content
+            
+            ###a 示例：
+            exp = ""
+            exp1 = "\neg1: 为当前登录用户在A服务器上做ssh免密码登录；"
+            exp1_cmd ="\n\t$(#) ssh-skip-pwd -p <password> -s <hostname/ip>"
+            
+            exp1_help= exp1+exp1_cmd
+            
+            exp2 = "\neg2:A服务器当前登录用户u1，为自己在服务器B、C上做ssh免密码"
+            exp2_cmd= "\n\t$(#) ssh-skip-pwd -f <host列表文件全路径>  -p <password>"
+            exp2_cmd_param = "\n\t -f参数文件内容：\n\t第一列为IP，第二列为hostname\n\t10.10.0.1\t\tnode01\n\t10.10.0.2\t\tnode02"
+            exp2_2= "\n\t当用户u1在服务器B、C上密码不一至时"
+            exp2_2_cmd = "\n\t$(#) ssh-skip-pwd -F <host\pwd列表文件全路径>"
+            exp2_2_cmd_param = "\n\t -F参数文件内容：\n\t第一列为IP，第二列为hostname\n\t10.10.0.1\t\tnode01\t\tpassword1\n\t10.10.0.2\t\tnode02\t\tpassword2"
+            exp2_other="\n注意当u1为root时，-f -F 文件中的hosts信息会被更新到A服务器的hosts中，同时更新到服务器B、C上"
+            
+            exp2_help= exp2+exp2_cmd+exp2_cmd_param+exp2_2+exp2_2_cmd+exp2_2_cmd_param+exp2_other
+            
+            exp3 = "\neg3:用户u1登录A服务器并为用户u2做ssh免密码登录服务器B、C\n要求：u2在ABCD服务器上的密码一致"
+            exp3_cmd="\n\t$(#) ssh-skip-pwd -u u2 -p <u2 password>  -f <host列表文件全路径> （当u1用户为root时，需要加入该参数--curt_pwd=<root 的密码吗>）"
+            exp3_cmd_param = "\n\t -f参数文件内容：\n\t第一列为IP，第二列为hostname\n\t10.10.0.1\t\tnode01\n\t10.10.0.2\t\tnode02"
+            exp3_2="\n登录在A服务器上的用户u1为D服务器上用户u2做免密码登录服务器B、C"
+            exp3_2_cmd="\n\t$(#) ssh-skip-pwd -u u2 -p <u2 password>  -f <host列表文件全路径> -s <服务器D的hostname> （当u1用户为root时，需要加入该参数--curt_pwd=<root 的密码吗>）"
+            exp3_2_cmd_param = "\n\t -f参数文件内容：\n\t第一列为IP，第二列为hostname\n\t10.10.0.1\t\tnode01\n\t10.10.0.2\t\tnode02"
+            exp3_other= "\n注意当u1为root时，-f 文件中的hosts信息会被更新到A服务器的hosts中，同时更新到服务器B、C上"
+            
+            exp3_help = exp3 + exp3_cmd +exp3_cmd_param+exp3_2+exp3_2_cmd+exp3_2_cmd_param+exp3_other
+            
+            exp4 = "\neg4:A服务器上登录的用户u1为多个用户同时做ssh免密码登录服务器B、C \n要求：每个用户在ABCD服务器上密码一致"
+            exp4_cmd = "\n\t$(#) ssh-skip-pwd -U <user/pwd 列表文件> -f <host列表文件全路径> （当u1用户为root时，需要加入该参数--curt_pwd=<root 的密码吗>）"
+            exp4_cmd_param_f = "\n\t -f参数的文件内容：\n\t第一列为IP，第二列为hostname\n\t10.10.0.1\t\tnode01\n\t10.10.0.2\t\tnode02"
+            exp4_cmd_param_U = "\n\t -U参数的文件内容：\n\t第一列为用户名，第二列为密码\n\tuser1\t\tpassword1\n\tuser2\t\tpassword2\n\t..."
+            exp4_2="\n登录在A服务器上的用户u1为D服务器上多个用户做免密码登录服务器B、C"
+            exp4_2_cmd="\n\t$(#) ssh-skip-pwd -U <user/pwd 列表文件> -f <host列表文件全路径> -s <服务器D的hostname>  （当u1用户为root时，需要加入该参数--curt_pwd=<root 的密码吗>）"
+            exp4_other= "\n注意当u1为root时，-f 文件中的hosts信息会被更新到A服务器的hosts中，同时更新到服务器B、C上"
+            
+            exp4_help = exp4+exp4_cmd+exp4_cmd_param_f +exp4_cmd_param_U +exp4_2+exp4_2_cmd+exp4_other
+            print f_usage +  F_usage + h_usage +p_usage+P_usage+s_usage+u_usage+U_usage + exp1_help + exp2_help+exp3_help+exp4_help
+                     
+        elif op == "-p" :
+            password = value
+        elif op == "-f" :
+            ih_file = value
+        elif op == "-F" :
+            ihp_file = value
+        elif op == "-u" :
+            ouser = value
+        elif op == "-U" :
+            user_pwd_file = value
+        elif op == "-P" :
+            if value == "" or value == None :
+                port = 22
+            else :
+                port = int(value)
+        elif op == "-s" :
+            server_host = value
+
+        elif op == "--curt_pwd" :
+            curt_pwd = value
+    ##i 当前登录用户自己做ssh免密码登录远程服务器，共两种方式
+    
+    if help_flag :
+        sys.exit(0)
+    
+#     if ih_file == "" and ihp_file=="" :
+#         print "-f 与 -F参数值不能同时为空"
+#         #os.system("echo  'error:-f 参数值不能为空' >> /tmp/ssh_skip_pwd.log")
+#         sys.exit(0)
+      
+    if ih_file != "" and ihp_file!="" :
+        print "-f 与 -F参数值不能同时存在"
+        sys.exit(0)
+    
+
+    ###eg3: 根据本地hosts文件内容，root用户为某一用户做ssh免密码登录，该用户在所有远程服务器密码均一致
+    ##f # ssh-skip-pwd -u username -p password -f hostlist  --curt_pwd 当前用户的password
+    if(ouser != "" and password != "" and ih_file != "") :
+        
+        otuser_4_user_ssh_nopwd(user,curt_pwd,ouser,password,server_host,port,ih_file)
+        sys.exit(0)
+    ###eg4: 根据本地hosts文件内容，root用户为一组用户做ssh免密码登录，该单个用户在所有远程服务器密码均一致
+    ###f -F user_pwd_file 文件内容： username   password
+    ##g #ssh-skip-pwd  -U user_pwd_file -f hostlist  --curt_pwd 当前用户的password
+    if(user_pwd_file != ""  and ih_file != "" ) :
+        otuser_4_userlist_ssh_nopwd(user,curt_pwd,port,user_pwd_file,server_host,ih_file)
+        sys.exit(0)
+    
+    ###eg5 : 本机登录用户向某一台远程主机做ssh免密码登录
+    ###a    $(#)  ssh-skip-pwd  -p password  -s remote_host
+    if(password != "" and server_host != "localhost" and server_host != "127.0.0.1") :
+        curt_user_ssh_nopwd_by_uph(user,password,server_host,port)
+        sys.exit(0)
+    
+    ###eg1: 同一用户在所有远程服务器密码均一致
+    ##b #ssh-skip-pwd  -f hostlsit -p 
+    ##c $ssh-skip-pwd  -f hostlist -p
+    if ih_file!="" and password != "" :
+        curt_user_ssh_nopwd_by_ih_file(user,password,port,ih_file)
+    ###eg2:同一用户在所有远程服务器密码不一致
+    ##d #ssh-skip-pwd  -F hostlist
+    ##e $ssh-skip-pwd  -F hostlist
+    if ihp_file != ""  :
+        curt_user_ssh_nopwd_by_ihp_file(user,password,port,ihp_file)
+ssh_skip_pwd()    
+# copy_file_2_target_host("abc","123456","/home/abc/.ssh/authorized_keys","node01","/home/abc/.ssh/authorized_keys")
